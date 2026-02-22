@@ -118,60 +118,33 @@ is_image() {
 }
 
 # ---------------------------------------------------------------------------
-# Show a batch of images in a single feh instance (no window close/reopen).
-# feh handles the transitions internally — completely smooth.
+# Show a single image fullscreen and keep it on screen forever (blocks).
+# feh stays open — no looping, no restarting.
 # ---------------------------------------------------------------------------
-show_images() {
-    log "Showing ${#@} image(s) — ${IMAGE_DISPLAY_SECS}s each"
-    feh --fullscreen --auto-zoom --hide-pointer \
-        --slideshow-delay "$IMAGE_DISPLAY_SECS" \
-        --on-last-slide quit \
-        -- "$@" >/dev/null 2>&1 || true
+show_image() {
+    log "Displaying: $(basename "$1")"
+    feh --fullscreen --auto-zoom --hide-pointer -- "$1" >/dev/null 2>&1 || true
 }
 
 # ---------------------------------------------------------------------------
-# Play a single video fullscreen
-# ---------------------------------------------------------------------------
-play_video() {
-    log "Video: $(basename "$1")"
-    mpv --fullscreen --no-osc --no-input-default-bindings \
-        --really-quiet --hwdec=auto \
-        --loop-file=no -- "$1" >/dev/null 2>&1 || true
-}
-
-# ---------------------------------------------------------------------------
-# Main loop – groups consecutive images into one feh call, plays videos
-# individually with mpv. This avoids the close/reopen flicker entirely.
+# Find the first image in the file list and display it permanently.
 # ---------------------------------------------------------------------------
 run_slideshow() {
-    while true; do
-        local image_batch=()
-
-        for f in "${ALL_FILES[@]}"; do
-            [[ -f "$f" ]] || continue
-
-            if is_image "$f"; then
-                image_batch+=("$f")
-            else
-                # Flush any queued images before playing the video
-                if [[ ${#image_batch[@]} -gt 0 ]]; then
-                    show_images "${image_batch[@]}"
-                    image_batch=()
-                fi
-                play_video "$f"
-            fi
-        done
-
-        # Flush remaining images at end of list
-        if [[ ${#image_batch[@]} -gt 0 ]]; then
-            show_images "${image_batch[@]}"
+    local first_image=""
+    for f in "${ALL_FILES[@]}"; do
+        if [[ -f "$f" ]] && is_image "$f"; then
+            first_image="$f"
+            break
         fi
-
-        if [[ "$SHUFFLE" == "true" ]]; then
-            mapfile -t ALL_FILES < <(printf '%s\n' "${ALL_FILES[@]}" | shuf)
-        fi
-        log "Loop complete – restarting slideshow"
     done
+
+    if [[ -z "$first_image" ]]; then
+        log "ERROR: No image files found in $MEDIA_DIR"
+        exit 1
+    fi
+
+    log "Showing first image and holding on screen"
+    show_image "$first_image"
 }
 
 # ---------------------------------------------------------------------------
