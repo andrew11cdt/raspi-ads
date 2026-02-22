@@ -118,16 +118,15 @@ is_image() {
 }
 
 # ---------------------------------------------------------------------------
-# Show a single image fullscreen for IMAGE_DISPLAY_SECS
-# Uses timeout to guarantee feh exits after the display duration.
+# Show a batch of images in a single feh instance (no window close/reopen).
+# feh handles the transitions internally — completely smooth.
 # ---------------------------------------------------------------------------
-show_image() {
-    log "Image: $(basename "$1") (${IMAGE_DISPLAY_SECS}s)"
-    timeout "$((IMAGE_DISPLAY_SECS + 2))" \
-        feh --fullscreen --auto-zoom --hide-pointer \
-            --slideshow-delay "$IMAGE_DISPLAY_SECS" \
-            --on-last-slide quit \
-            -- "$1" >/dev/null 2>&1 || true
+show_images() {
+    log "Showing ${#@} image(s) — ${IMAGE_DISPLAY_SECS}s each"
+    feh --fullscreen --auto-zoom --hide-pointer \
+        --slideshow-delay "$IMAGE_DISPLAY_SECS" \
+        --on-last-slide quit \
+        -- "$@" >/dev/null 2>&1 || true
 }
 
 # ---------------------------------------------------------------------------
@@ -141,19 +140,32 @@ play_video() {
 }
 
 # ---------------------------------------------------------------------------
-# Main loop – cycle through files forever
+# Main loop – groups consecutive images into one feh call, plays videos
+# individually with mpv. This avoids the close/reopen flicker entirely.
 # ---------------------------------------------------------------------------
 run_slideshow() {
     while true; do
+        local image_batch=()
+
         for f in "${ALL_FILES[@]}"; do
             [[ -f "$f" ]] || continue
+
             if is_image "$f"; then
-                show_image "$f"
+                image_batch+=("$f")
             else
+                # Flush any queued images before playing the video
+                if [[ ${#image_batch[@]} -gt 0 ]]; then
+                    show_images "${image_batch[@]}"
+                    image_batch=()
+                fi
                 play_video "$f"
             fi
-            sleep 0.3
         done
+
+        # Flush remaining images at end of list
+        if [[ ${#image_batch[@]} -gt 0 ]]; then
+            show_images "${image_batch[@]}"
+        fi
 
         if [[ "$SHUFFLE" == "true" ]]; then
             mapfile -t ALL_FILES < <(printf '%s\n' "${ALL_FILES[@]}" | shuf)
