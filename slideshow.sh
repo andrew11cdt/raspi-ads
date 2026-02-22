@@ -10,8 +10,20 @@ SHUFFLE="${SHUFFLE:-true}"
 
 SUPPORTED_IMAGES="jpg|jpeg|png|bmp|gif|webp|tiff"
 SUPPORTED_VIDEOS="mp4|mkv|avi|mov|wmv|flv|webm|m4v|mpg|mpeg"
+LOCK_FILE="/tmp/slideshow.lock"
 
 log() { echo "[slideshow] $(date '+%H:%M:%S') $*"; }
+
+# ---------------------------------------------------------------------------
+# Prevent multiple instances from running at the same time
+# ---------------------------------------------------------------------------
+acquire_lock() {
+    exec 200>"$LOCK_FILE"
+    if ! flock -n 200; then
+        log "Another slideshow instance is already running – exiting."
+        exit 0
+    fi
+}
 
 # ---------------------------------------------------------------------------
 # Dependency check / install
@@ -20,7 +32,6 @@ check_deps() {
     local missing=()
     command -v feh   >/dev/null 2>&1 || missing+=(feh)
     command -v mpv   >/dev/null 2>&1 || missing+=(mpv)
-    command -v xdotool >/dev/null 2>&1 || missing+=(xdotool)
 
     if [[ ${#missing[@]} -gt 0 ]]; then
         log "Installing missing packages: ${missing[*]}"
@@ -60,9 +71,21 @@ disable_screensaver() {
 # ---------------------------------------------------------------------------
 hide_cursor() {
     if command -v unclutter >/dev/null 2>&1; then
+        pkill -x unclutter 2>/dev/null || true
         unclutter -idle 1 -root &
     fi
 }
+
+# ---------------------------------------------------------------------------
+# Clean up child processes on exit
+# ---------------------------------------------------------------------------
+cleanup() {
+    log "Stopping slideshow"
+    pkill -P $$ 2>/dev/null || true
+    rm -f "$LOCK_FILE"
+    exit 0
+}
+trap cleanup EXIT INT TERM
 
 # ---------------------------------------------------------------------------
 # Collect media files from MEDIA_DIR
@@ -74,8 +97,10 @@ collect_files() {
     )
 
     if [[ ${#ALL_FILES[@]} -eq 0 ]]; then
-        log "ERROR: No media files found in $MEDIA_DIR"
-        exit 1
+        log "ERROR: No media files found in $MEDIA_DIR — waiting 30s and retrying…"
+        sleep 30
+        collect_files
+        return
     fi
 
     if [[ "$SHUFFLE" == "true" ]]; then
@@ -94,12 +119,15 @@ is_image() {
 
 # ---------------------------------------------------------------------------
 # Show a single image fullscreen for IMAGE_DISPLAY_SECS
+# Uses timeout to guarantee feh exits after the display duration.
 # ---------------------------------------------------------------------------
 show_image() {
     log "Image: $(basename "$1") (${IMAGE_DISPLAY_SECS}s)"
-    feh --fullscreen --auto-zoom --hide-pointer \
-        --on-last-slide quit --slideshow-delay "$IMAGE_DISPLAY_SECS" \
-        "$1" >/dev/null 2>&1
+    timeout "$((IMAGE_DISPLAY_SECS + 2))" \
+        feh --fullscreen --auto-zoom --hide-pointer \
+            --slideshow-delay "$IMAGE_DISPLAY_SECS" \
+            --on-last-slide quit \
+            -- "$1" >/dev/null 2>&1 || true
 }
 
 # ---------------------------------------------------------------------------
@@ -109,7 +137,7 @@ play_video() {
     log "Video: $(basename "$1")"
     mpv --fullscreen --no-osc --no-input-default-bindings \
         --really-quiet --hwdec=auto \
-        --loop-file=no "$1" >/dev/null 2>&1
+        --loop-file=no -- "$1" >/dev/null 2>&1 || true
 }
 
 # ---------------------------------------------------------------------------
@@ -124,6 +152,7 @@ run_slideshow() {
             else
                 play_video "$f"
             fi
+            sleep 0.3
         done
 
         if [[ "$SHUFFLE" == "true" ]]; then
@@ -137,6 +166,7 @@ run_slideshow() {
 # Entry point
 # ---------------------------------------------------------------------------
 main() {
+    acquire_lock
     log "Starting slideshow from: $MEDIA_DIR"
     check_deps
     wait_for_display
