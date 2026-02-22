@@ -118,16 +118,18 @@ is_image() {
 }
 
 # ---------------------------------------------------------------------------
-# Show a single image fullscreen and keep it on screen forever (blocks).
-# feh stays open — no looping, no restarting.
+# Show image fullscreen. --reload 1 makes feh check the file every second
+# and update the display automatically when it changes on disk.
 # ---------------------------------------------------------------------------
 show_image() {
-    log "Displaying: $(basename "$1")"
-    feh --fullscreen --auto-zoom --hide-pointer -- "$1" >/dev/null 2>&1 || true
+    log "Displaying: $(basename "$1")  (auto-reload enabled)"
+    feh --fullscreen --auto-zoom --hide-pointer --reload 1 \
+        -- "$1" >/dev/null 2>&1 || true
 }
 
 # ---------------------------------------------------------------------------
 # Find the first image in the file list and display it permanently.
+# When someone overwrites the file, feh picks up the change automatically.
 # ---------------------------------------------------------------------------
 run_slideshow() {
     local first_image=""
@@ -144,6 +146,7 @@ run_slideshow() {
     fi
 
     log "Showing first image and holding on screen"
+    log "Push a new image to: $first_image"
     show_image "$first_image"
 }
 
