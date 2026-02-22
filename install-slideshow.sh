@@ -9,7 +9,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SLIDESHOW_SCRIPT="$SCRIPT_DIR/slideshow.sh"
-MEDIA_DIR="${1:-$HOME/slideshow-media}"
+MEDIA_DIR="${1:-$SCRIPT_DIR/media}"
 USER_NAME="${SUDO_USER:-$USER}"
 USER_HOME=$(eval echo "~$USER_NAME")
 AUTOSTART_DIR="$USER_HOME/.config/autostart"
@@ -91,7 +91,7 @@ echo "  1. Copy your photos/videos into: $MEDIA_DIR"
 echo "  2. Reboot:  sudo reboot"
 echo ""
 echo "Configuration (edit slideshow.sh or set env vars):"
-echo "  MEDIA_DIR             – folder with media  (default: ~/slideshow-media)"
+echo "  MEDIA_DIR             – folder with media  (default: <script-dir>/media)"
 echo "  IMAGE_DISPLAY_SECS    – seconds per image  (default: 5)"
 echo "  SHUFFLE               – randomize order     (default: true)"
 echo ""

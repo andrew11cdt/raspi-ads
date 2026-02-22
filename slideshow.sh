@@ -4,7 +4,8 @@
 # Loops through all images and videos in a folder on boot.
 # =============================================================================
 
-MEDIA_DIR="${MEDIA_DIR:-$HOME/slideshow-media}"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+MEDIA_DIR="${MEDIA_DIR:-$SCRIPT_DIR/media}"
 IMAGE_DISPLAY_SECS="${IMAGE_DISPLAY_SECS:-5}"
 SHUFFLE="${SHUFFLE:-true}"
 

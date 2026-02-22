@@ -12,7 +12,8 @@ set -euo pipefail
 
 IMAGE_FILE="${1:-}"
 PI_HOST="${2:-pi@raspberrypi.local}"
-REMOTE_MEDIA_DIR="~/slideshow-media"
+REMOTE_REPO_DIR="${3:-~/Projects/ChouxMindful-Lab-ads}"
+REMOTE_MEDIA_DIR="$REMOTE_REPO_DIR/media"
 
 if [[ -z "$IMAGE_FILE" ]]; then
     echo "Usage: bash push-image.sh <image-file> [user@pi-address]"
