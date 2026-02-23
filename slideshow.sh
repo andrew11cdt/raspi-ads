@@ -78,11 +78,45 @@ hide_cursor() {
 }
 
 # ---------------------------------------------------------------------------
+# Hide desktop panel (taskbar) and pcmanfm desktop icons for true fullscreen
+# ---------------------------------------------------------------------------
+hide_desktop() {
+    # LXDE panel (Raspberry Pi OS with desktop)
+    if pgrep -x lxpanel >/dev/null 2>&1; then
+        log "Hiding lxpanel (taskbar)"
+        pkill -x lxpanel 2>/dev/null || true
+    fi
+    # Wayfire panel (newer Raspberry Pi OS / Bookworm)
+    if pgrep -f wf-panel-pi >/dev/null 2>&1; then
+        log "Hiding wf-panel-pi (taskbar)"
+        pkill -f wf-panel-pi 2>/dev/null || true
+    fi
+    # PCManFM desktop icons
+    if pgrep -x pcmanfm >/dev/null 2>&1; then
+        log "Hiding desktop icons"
+        pcmanfm --desktop-off 2>/dev/null || true
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# Restore desktop panel and icons on exit
+# ---------------------------------------------------------------------------
+restore_desktop() {
+    if command -v lxpanel >/dev/null 2>&1; then
+        lxpanel --profile LXDE-pi >/dev/null 2>&1 &
+    fi
+    if command -v pcmanfm >/dev/null 2>&1; then
+        pcmanfm --desktop 2>/dev/null &
+    fi
+}
+
+# ---------------------------------------------------------------------------
 # Clean up child processes on exit
 # ---------------------------------------------------------------------------
 cleanup() {
     log "Stopping slideshow"
     pkill -P $$ 2>/dev/null || true
+    restore_desktop
     rm -f "$LOCK_FILE"
     exit 0
 }
@@ -161,6 +195,7 @@ main() {
     wait_for_display
     disable_screensaver
     hide_cursor
+    hide_desktop
     collect_files
     run_slideshow
 }
