@@ -1,54 +1,42 @@
 #!/bin/bash
 # =============================================================================
 # Turn off the Raspberry Pi display (screen goes black, Pi stays on).
-# Stops feh so nothing holds the display active, then powers off HDMI.
+# Stops the slideshow and covers the screen with a black window.
 #
 # Usage:  bash sleep-display.sh
 # =============================================================================
 
 export DISPLAY="${DISPLAY:-:0}"
 
-echo "Turning display off…"
+echo "Putting display to sleep…"
 
-# Stop feh so it doesn't hold the display active
+# Stop the slideshow
 pkill -x feh 2>/dev/null && echo "  Stopped feh"
+pkill -f "slideshow.sh" 2>/dev/null && echo "  Stopped slideshow"
+rm -f /tmp/slideshow.lock
 
-sleep 0.5
+# Kill any previous black screen
+pkill -f "feh --fullscreen.*black" 2>/dev/null
 
-SUCCESS=false
-
-# Method 1: DRM kernel interface (most reliable on Bookworm with KMS)
-for dpms_file in /sys/class/drm/card*-HDMI-A-*/dpms; do
-    if [[ -f "$dpms_file" ]]; then
-        echo "Off" | sudo tee "$dpms_file" >/dev/null 2>&1
-        echo "  HDMI off via $dpms_file"
-        SUCCESS=true
+# Create a 1x1 black pixel image if it doesn't exist
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+BLACK_IMG="$SCRIPT_DIR/.black.png"
+if [[ ! -f "$BLACK_IMG" ]]; then
+    if command -v convert >/dev/null 2>&1; then
+        convert -size 1x1 xc:black "$BLACK_IMG" 2>/dev/null
+    else
+        printf '\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDATx\x9cc\x60\x60\x60\x00\x00\x00\x04\x00\x01\xa3\x01\x18\xd8\x00\x00\x00\x00IEND\xaeB\x60\x82' > "$BLACK_IMG"
     fi
-done
-
-for status_file in /sys/class/drm/card*-HDMI-A-*/status; do
-    enabled_file="${status_file%/status}/enabled"
-    if [[ -f "$enabled_file" ]]; then
-        echo "disabled" | sudo tee "$enabled_file" >/dev/null 2>&1
-        echo "  HDMI disabled via $enabled_file"
-        SUCCESS=true
-    fi
-done
-
-# Method 2: xset dpms (re-enable dpms first since slideshow disables it)
-xset +dpms          2>/dev/null
-xset dpms 1 1 1     2>/dev/null
-xset dpms force off 2>/dev/null && echo "  xset dpms force off" && SUCCESS=true
-
-# Method 3: vcgencmd
-if command -v vcgencmd >/dev/null 2>&1; then
-    vcgencmd display_power 0 2>/dev/null
 fi
 
-if $SUCCESS; then
-    echo "Display is off."
-else
-    echo "ERROR: Could not turn off display."
-    echo "Try: sudo bash sleep-display.sh"
-    exit 1
-fi
+# Disable screensaver and blank the screen
+xset s off      2>/dev/null
+xset -dpms      2>/dev/null
+xset s noblank  2>/dev/null
+
+# Show fullscreen black image (stays on top of desktop, panel, everything)
+feh --fullscreen --auto-zoom --hide-pointer \
+    --image-bg black --title "black" \
+    "$BLACK_IMG" >/dev/null 2>&1 &
+
+echo "Display is sleeping (black screen). Run wake-display.sh to restore."
