@@ -12,20 +12,30 @@ export DISPLAY="${DISPLAY:-:0}"
 
 echo "Turning display on…"
 
-# Method 1: vcgencmd (most reliable on Raspberry Pi)
-if command -v vcgencmd >/dev/null 2>&1; then
-    vcgencmd display_power 1 2>/dev/null && echo "Display on (vcgencmd)"
-fi
-
-# Method 2: xrandr — detect and re-enable the output
+# Method 1: xrandr (works on Bookworm with KMS driver)
 if command -v xrandr >/dev/null 2>&1; then
     OUTPUT=$(xrandr --query 2>/dev/null | grep ' connected' | head -1 | awk '{print $1}')
     if [[ -n "$OUTPUT" ]]; then
-        xrandr --output "$OUTPUT" --auto 2>/dev/null && echo "Display on (xrandr: $OUTPUT)"
+        xrandr --output "$OUTPUT" --auto 2>/dev/null
+        echo "Display on (xrandr: $OUTPUT)"
     fi
 fi
 
-# Method 3: xset dpms
+# Method 2: wlr-randr (Wayland / Wayfire on newer Pi OS)
+if command -v wlr-randr >/dev/null 2>&1; then
+    OUTPUT=$(wlr-randr 2>/dev/null | grep '^[A-Z]' | head -1 | awk '{print $1}')
+    if [[ -n "$OUTPUT" ]]; then
+        wlr-randr --output "$OUTPUT" --on 2>/dev/null
+        echo "Display on (wlr-randr: $OUTPUT)"
+    fi
+fi
+
+# Method 3: vcgencmd
+if command -v vcgencmd >/dev/null 2>&1; then
+    vcgencmd display_power 1 2>/dev/null
+fi
+
+# Method 4: xset — re-enable and disable dpms
 xset dpms force on  2>/dev/null
 xset -dpms          2>/dev/null
 xset s off          2>/dev/null
