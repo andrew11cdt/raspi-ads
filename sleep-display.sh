@@ -1,7 +1,7 @@
 #!/bin/bash
 # =============================================================================
 # Turn off the Raspberry Pi display (screen goes black, Pi stays on).
-# The slideshow keeps running in the background — nothing is killed.
+# Stops feh so nothing holds the display active, then powers off HDMI.
 #
 # Usage:  bash sleep-display.sh
 # =============================================================================
@@ -10,42 +10,45 @@ export DISPLAY="${DISPLAY:-:0}"
 
 echo "Turning display off…"
 
-# Method 1: xrandr (works on Bookworm with KMS driver)
-if command -v xrandr >/dev/null 2>&1; then
-    OUTPUT=$(xrandr --query 2>/dev/null | grep ' connected' | head -1 | awk '{print $1}')
-    if [[ -n "$OUTPUT" ]]; then
-        xrandr --output "$OUTPUT" --off 2>/dev/null
-        echo "Display off (xrandr: $OUTPUT)"
-        exit 0
-    fi
-fi
+# Stop feh so it doesn't hold the display active
+pkill -x feh 2>/dev/null && echo "  Stopped feh"
 
-# Method 2: wlr-randr (Wayland / Wayfire on newer Pi OS)
-if command -v wlr-randr >/dev/null 2>&1; then
-    OUTPUT=$(wlr-randr 2>/dev/null | grep '^[A-Z]' | head -1 | awk '{print $1}')
-    if [[ -n "$OUTPUT" ]]; then
-        wlr-randr --output "$OUTPUT" --off 2>/dev/null
-        echo "Display off (wlr-randr: $OUTPUT)"
-        exit 0
-    fi
-fi
+sleep 0.5
 
-# Method 3: vcgencmd — verify it actually worked
+SUCCESS=false
+
+# Method 1: DRM kernel interface (most reliable on Bookworm with KMS)
+for dpms_file in /sys/class/drm/card*-HDMI-A-*/dpms; do
+    if [[ -f "$dpms_file" ]]; then
+        echo "Off" | sudo tee "$dpms_file" >/dev/null 2>&1
+        echo "  HDMI off via $dpms_file"
+        SUCCESS=true
+    fi
+done
+
+for status_file in /sys/class/drm/card*-HDMI-A-*/status; do
+    enabled_file="${status_file%/status}/enabled"
+    if [[ -f "$enabled_file" ]]; then
+        echo "disabled" | sudo tee "$enabled_file" >/dev/null 2>&1
+        echo "  HDMI disabled via $enabled_file"
+        SUCCESS=true
+    fi
+done
+
+# Method 2: xset dpms (re-enable dpms first since slideshow disables it)
+xset +dpms          2>/dev/null
+xset dpms 1 1 1     2>/dev/null
+xset dpms force off 2>/dev/null && echo "  xset dpms force off" && SUCCESS=true
+
+# Method 3: vcgencmd
 if command -v vcgencmd >/dev/null 2>&1; then
     vcgencmd display_power 0 2>/dev/null
-    result=$(vcgencmd display_power 2>/dev/null)
-    if [[ "$result" == *"display_power=0"* ]]; then
-        echo "Display off (vcgencmd)"
-        exit 0
-    else
-        echo "vcgencmd failed ($result), trying next method…"
-    fi
 fi
 
-# Method 4: xset dpms
-xset +dpms 2>/dev/null
-xset dpms 1 1 1 2>/dev/null
-xset dpms force off 2>/dev/null && echo "Display off (xset)" && exit 0
-
-echo "ERROR: Could not turn off display"
-exit 1
+if $SUCCESS; then
+    echo "Display is off."
+else
+    echo "ERROR: Could not turn off display."
+    echo "Try: sudo bash sleep-display.sh"
+    exit 1
+fi
