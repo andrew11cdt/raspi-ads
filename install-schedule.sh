@@ -36,8 +36,8 @@ parse_time() {
         exit 1
     fi
 
-    local hour="${BASH_REMATCH[1]}"
-    local minute="${BASH_REMATCH[2]}"
+    local hour=$((10#${BASH_REMATCH[1]}))
+    local minute=$((10#${BASH_REMATCH[2]}))
 
     if [[ $hour -gt 23 || $minute -gt 59 ]]; then
         echo "ERROR: $label time '$time_str' out of range."
